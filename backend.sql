@@ -19,3 +19,13 @@ CREATE TABLE reviews (
 INSERT INTO locations (name, address) VALUES ('Amen Street Fish and Raw Bar', '205 E. Bay Street, Charleston, SC 29401');
 INSERT INTO reviews (location_id, noise_level, light_level, crowd_level) VALUES (1, 2, 3, 2);
 INSERT INTO reviews (location_id, noise_level, light_level, crowd_level) VALUES (1, 1, 3, 1);
+
+
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE reviews ADD COLUMN user_id INTEGER REFERENCES users(id);
