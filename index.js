@@ -25,6 +25,7 @@ const pool = new Pool({
 
 //create endpoint for registration
 app.post('/api/auth/register', async(req, res) => {
+    console.log(req.body);
     const { email, password } = req.body;
 
     //make sure email and password are not blank
@@ -46,7 +47,7 @@ app.post('/api/auth/register', async(req, res) => {
         //user inserted successfully
         res.status(201).json({
             message: 'User created successfully.',
-            user: newUser.row[0],
+            user: newUser.rows[0],
         });
 
     }catch(err){
@@ -56,9 +57,10 @@ app.post('/api/auth/register', async(req, res) => {
 });
 
 //create endpoint to log in user and generate a JWT
-app.post('api/auth/login', async(req, res) => {
+app.post('/api/auth/login', async(req, res) => {
+    console.log(req.body);
     const { email, password } = req.body;
-
+    
     //confirm valid user
     try{
         //validate user
@@ -85,7 +87,8 @@ app.post('api/auth/login', async(req, res) => {
             process.env.JWT_SECRET,
             {expiresIn: '1h'},   //set expiration date of token to 1 hour
         );
-
+        
+        console.log({token});
         res.json({token});
     }catch(err){
         console.error(err.message);
@@ -120,6 +123,20 @@ app.get('/api/locations/:id', async(req, res) => {
         });
     }catch(err){
         //send 500 and error message if failure
+        console.error(err.message);
+        res.status(500).send(`Server Error: ${err.message}`);
+    }
+});
+
+app.post('/api/reviews', async(req, res) =>{
+    try{
+        const {location_id, noise_level, light_level, crowd_level } = req.body;
+        const newReview = await pool.query(
+            'INSERT INTO reviews (location_id, noise_level, light_level, crowd_level) VALUES ($1, $2, $3, $4) RETURNING *',
+            [location_id, noise_level, light_level, crowd_level]
+        );
+        res.status(201).json(newReview.rows[0]);
+    }catch(err){
         console.error(err.message);
         res.status(500).send(`Server Error: ${err.message}`);
     }
