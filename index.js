@@ -43,6 +43,7 @@ app.post('/api/auth/register', async(req, res) => {
             [email, hash]
         );
 
+        //user inserted successfully
         res.status(201).json({
             message: 'User created successfully.',
             user: newUser.row[0],
