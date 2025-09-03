@@ -3,6 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
 
+//imports needed for JWT
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
 const app = express();
 const port = 3002;
 
@@ -17,6 +21,75 @@ const pool = new Pool({
     database: process.env.DB_DATABASE,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT,
+});
+
+//create endpoint for registration
+app.post('/api/auth/register', async(req, res) => {
+    const { email, password } = req.body;
+
+    //make sure email and password are not blank
+    if(!email || !password){
+        return res.status(400).json({ message: 'Please enter email and password.' });
+    }
+
+    try{
+        //create a hash of the pwd
+        const salt = await bcrypt.genSalt(10);
+        const hash = await bcrypt.hash(password, salt);
+
+        //insert new user into database
+        const newUser = await pool.query(
+            'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email', 
+            [email, hash]
+        );
+
+        res.status(201).json({
+            message: 'User created successfully.',
+            user: newUser.row[0],
+        });
+
+    }catch(err){
+        console.error(err.message);
+        res.status(500).send(`Error: ${err.message}`);
+    }
+});
+
+//create endpoint to log in user and generate a JWT
+app.post('api/auth/login', async(req, res) => {
+    const { email, password } = req.body;
+
+    //confirm valid user
+    try{
+        //validate user
+        const realUser = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+
+        //was user record returned?
+        if(realUser.rows.length === 0){
+            return res.status(400).json({message: 'Invalid credentials.'});
+        }
+
+        //get reference to current user record
+        const user = realUser.rows[0];
+
+        //validate password hash
+        const validPwd = await bcrypt.compare(password, user.password_hash);
+        if(!validPwd){
+            return res.status(400).json({message: 'Invalid credentials.'});
+        }
+
+        //valid pwd, create JWT
+        const payload = {user: { id: user.id }};
+        const token = jwt.sign(
+            payload, 
+            process.env.JWT_SECRET,
+            {expiresIn: '1h'},   //set expiration date of token to 1 hour
+        );
+
+        res.json({token});
+    }catch(err){
+        console.error(err.message);
+        res.status(500).send(`Error: ${err.message}`);
+    }
 });
 
 //create endpoint to get location and details
