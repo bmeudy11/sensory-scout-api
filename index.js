@@ -97,7 +97,7 @@ app.post('/api/auth/login', async(req, res) => {
     }
 });
 
-//create endpoint to get location and details
+//create endpoint to get location and avg reviews
 app.get('/api/locations/:id', auth, async(req, res) => {
     const { id } = req.params;
     
@@ -129,6 +129,7 @@ app.get('/api/locations/:id', auth, async(req, res) => {
     }
 });
 
+//create endpoint to get location list
 app.get('/api/locations', auth, async(req, res) => {
     try{
         const allLocations = await pool.query('SELECT * FROM locations ORDER BY name ASC');
@@ -140,6 +141,7 @@ app.get('/api/locations', auth, async(req, res) => {
     }
 });
 
+//create endpoint to post reviews
 app.post('/api/reviews', auth, async(req, res) =>{
     try{
         const {location_id, noise_level, light_level, crowd_level } = req.body;
