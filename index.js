@@ -10,6 +10,13 @@ const auth = require('./middleware/auth');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+//imports needed for chatbot
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+//init Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({mode: "gemini-2.5-Pro"});
+
 const app = express();
 const port = 3002;
 
@@ -146,7 +153,8 @@ app.post('/api/reviews', auth, async(req, res) =>{
     try{
         const {location_id, noise_level, light_level, crowd_level } = req.body;
         const newReview = await pool.query(
-            'INSERT INTO reviews (location_id, noise_level, light_level, crowd_level) VALUES ($1, $2, $3, $4) RETURNING *',
+            `INSERT INTO reviews (location_id, noise_level, light_level, crowd_level 
+            ) VALUES ($1, $2, $3, $4) RETURNING *`,
             [location_id, noise_level, light_level, crowd_level]
         );
         res.status(201).json(newReview.rows[0]);
