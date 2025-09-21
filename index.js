@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const axios = require('axios');
 
 //import jwt middleware to validate token
 const auth = require('./middleware/auth');
@@ -13,9 +14,14 @@ const jwt = require('jsonwebtoken');
 //imports needed for chatbot
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
+//strategy for recaptcha
+const { GoogleRecaptchaV2Strategy } = require('./recaptchaStrategies');
+
 //init Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({model: "gemini-2.5-Pro"});
+const model = genAI.getGenerativeModel({model: "gemini-1.5-flash",
+    "generationConfig" : {"responseMimeType": "application/json"}
+});
 
 const app = express();
 const port = 3002;
@@ -66,6 +72,30 @@ app.post('/api/auth/register', async(req, res) => {
     }
 });
 
+app.post('/api/verify', async(req, res) =>{
+    const { captchaValue } = req.body;
+    console.log('captchaValue: ', captchaValue);
+
+    //instantiate reCaptcha strategy
+    const captchaVerifier = new GoogleRecaptchaV2Strategy();
+
+    try{
+        //use strategy to validate token
+        const isCaptchaValid = await captchaVerifier.verify(captchaValue);
+        console.log('isCaptchValid: ', isCaptchaValid);
+
+        if (!isCaptchaValid) {
+            return res.status(400).json({ msg: 'CAPTCHA verification failed.' });
+        }
+
+        return res.status(200).json({isCaptchaValid});
+
+    }catch(err){
+        console.log('strategy error: ', err);
+        return res.status(400).json({ msg: 'CAPTCHA verification failed.' });
+    }
+});
+
 //create endpoint to log in user and generate a JWT
 app.post('/api/auth/login', async(req, res) => {
     const { email, password } = req.body;
@@ -83,6 +113,8 @@ app.post('/api/auth/login', async(req, res) => {
         //get reference to current user record
         const user = realUser.rows[0];
 
+        //console.log('user: ', user);
+
         //validate password hash
         const validPwd = await bcrypt.compare(password, user.password_hash);
         if(!validPwd){
@@ -97,7 +129,8 @@ app.post('/api/auth/login', async(req, res) => {
             {expiresIn: '1h'},   //set expiration date of token to 1 hour
         );
         
-        res.json({token});
+        res.json({
+            user: user.id, token});
     }catch(err){
         console.error(err.message);
         res.status(500).send(`Error: ${err.message}`);
@@ -151,16 +184,58 @@ app.get('/api/locations', auth, async(req, res) => {
 //create endpoint to post reviews
 app.post('/api/reviews', auth, async(req, res) =>{
     try{
-        const {location_id, noise_level, light_level, crowd_level } = req.body;
+        const {location_id, noise_level, light_level, crowd_level, user_id } = req.body;
+
         const newReview = await pool.query(
-            `INSERT INTO reviews (location_id, noise_level, light_level, crowd_level 
-            ) VALUES ($1, $2, $3, $4) RETURNING *`,
-            [location_id, noise_level, light_level, crowd_level]
+            `INSERT INTO reviews (location_id, noise_level, light_level, crowd_level, user_id 
+            ) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [location_id, noise_level, light_level, crowd_level, user_id]
         );
         res.status(201).json(newReview.rows[0]);
     }catch(err){
         console.error(err.message);
         res.status(500).send(`Server Error: ${err.message}`);
+    }
+});
+
+app.post('/api/suggest', async(req, res) => {
+    const { message } = req.body;
+    if(!message){
+        return res.status(400).json({ error: "Message is required."});
+    }
+
+    try{
+        const prompt=`
+            You are a helpful assistant for the SensoryScout application.  You goal is to suggest 
+            locations based on user requests related to sensory needs: (ex. "quiet", "not crowded", "dimly lit").
+
+            Based on the user's message: "${message}", provide 2-3 location suggestions.
+
+            VERY IMPORTANT:  Respond ONLY with valid JSON object.  Do not include any text before or after the JSON.
+
+            The JSON object should follow this structure, with no prefixes:
+            {
+                "suggestions" : [
+                    {
+                        "name" : "Location Name",
+                        "type" : "ex, Cafe, Park, Library",
+                        "reason" : "A brief explanation of why this location fits the user's request."
+                    }
+                ]
+            }
+        `;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+
+        console.log("Response: ", responseText);
+
+        const parsedResponse = JSON.parse(responseText);
+
+        res.json(parsedResponse);
+    }catch(err){
+        console.log("Error calling gemini api: ", err);
+        res.status(500).json({error: "Failed to get suggestions.", err});
     }
 });
 
