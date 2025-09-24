@@ -11,6 +11,11 @@ app.use(express.json());
 const indexRoutes = require('./routes/v1/index');
 app.use('/api/v1', indexRoutes);
 
+app.get('/health', async(req, res)=> {
+    console.log('health requested.', new Date());
+    res.status(200).json({msg: `We good at ${new Date()}`});
+});
+
 //start up the express server
 app.listen(port, () => {
     console.log(`server running on http://localhost:${port}`);
